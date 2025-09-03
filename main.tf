@@ -9,20 +9,20 @@ terraform {
 }
 
 provider "aws" {
-  region = "us-west-2"  # Change this to your preferred region
+  region = "us-west-2" # Change this to your preferred region
 }
 
 locals {
   vpcs = {
     vpc_gateway = {
-      name = "vpc-gateway"
-      cidr = "10.0.0.0/16"
+      name            = "vpc-gateway"
+      cidr            = "10.0.0.0/16"
       private_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
       public_subnets  = ["10.0.101.0/24", "10.0.102.0/24"]
     }
     vpc_backend = {
-      name = "vpc-backend"
-      cidr = "10.1.0.0/16"
+      name            = "vpc-backend"
+      cidr            = "10.1.0.0/16"
       private_subnets = ["10.1.1.0/24", "10.1.2.0/24"]
       public_subnets  = ["10.1.101.0/24", "10.1.102.0/24"]
     }
@@ -31,8 +31,8 @@ locals {
 
 module "vpc" {
   for_each = local.vpcs
-  source = "terraform-aws-modules/vpc/aws"
-  version = "~> 5.0"
+  source   = "terraform-aws-modules/vpc/aws"
+  version  = "~> 5.0"
 
   name = each.value.name
   cidr = each.value.cidr
@@ -41,8 +41,8 @@ module "vpc" {
   private_subnets = each.value.private_subnets
   public_subnets  = each.value.public_subnets
 
-  enable_nat_gateway = true
-  single_nat_gateway = true
+  enable_nat_gateway     = true
+  single_nat_gateway     = true
   one_nat_gateway_per_az = true
 
   enable_dns_hostnames = true
@@ -267,10 +267,10 @@ module "eks" {
   cluster_security_group_additional_rules = {
     ingress_nodes_443 = {
       description                = "Node groups to cluster API"
-      protocol                  = "tcp"
-      from_port                 = 443
-      to_port                   = 443
-      type                      = "ingress"
+      protocol                   = "tcp"
+      from_port                  = 443
+      to_port                    = 443
+      type                       = "ingress"
       source_node_security_group = true
     }
   }
@@ -291,15 +291,15 @@ module "eks" {
       ]
 
       labels = {
-        Environment = "production"
-        Project     = "sentinel"
-        VPC         = each.value.name
+        Environment  = "production"
+        Project      = "sentinel"
+        VPC          = each.value.name
         InstanceType = "t4g.medium"
         CapacityType = "SPOT"
       }
 
       tags = {
-        ExtraTag = "eks-node-group"
+        ExtraTag     = "eks-node-group"
         InstanceType = "t4g.medium"
         CapacityType = "SPOT"
       }
