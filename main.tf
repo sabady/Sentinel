@@ -224,7 +224,7 @@ resource "aws_security_group" "backend_worker_nodes" {
 module "eks" {
   for_each = local.vpcs
   source   = "terraform-aws-modules/eks/aws"
-  version  = "~> 19.0"
+  version  = "~> 20.0"
 
   cluster_name    = "eks-${each.value.name}"
   cluster_version = "1.28"
