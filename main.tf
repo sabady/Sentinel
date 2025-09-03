@@ -140,8 +140,8 @@ resource "aws_security_group" "gateway_worker_nodes" {
     from_port       = 0
     to_port         = 65535
     protocol        = "tcp"
-    security_groups = [aws_security_group.gateway_worker_nodes.id]
-    description     = "Allow all TCP ports from other worker nodes in same VPC"
+    cidr_blocks     = [module.vpc["vpc_gateway"].vpc_cidr_block]
+    description     = "Allow all TCP ports from VPC CIDR for internal communication"
   }
 
 
@@ -199,8 +199,8 @@ resource "aws_security_group" "backend_worker_nodes" {
     from_port       = 0
     to_port         = 65535
     protocol        = "tcp"
-    security_groups = [aws_security_group.backend_worker_nodes.id]
-    description     = "Allow all TCP ports from other worker nodes in same VPC"
+    cidr_blocks     = [module.vpc["vpc_backend"].vpc_cidr_block]
+    description     = "Allow all TCP ports from VPC CIDR for internal communication"
   }
 
 
