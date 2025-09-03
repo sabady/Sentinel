@@ -1,5 +1,18 @@
 terraform {
   required_version = ">= 1.0"
+
+  # S3 Backend Configuration for Remote State Storage
+  backend "s3" {
+    bucket         = "sentinel-terraform-state"
+    key            = "infrastructure/terraform.tfstate"
+    region         = "us-west-2"
+    encrypt        = true
+    dynamodb_table = "sentinel-terraform-locks"
+
+    # Enable state locking and consistency checking
+    # Note: The DynamoDB table must exist before running terraform init
+  }
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -11,6 +24,8 @@ terraform {
 provider "aws" {
   region = "us-west-2" # Change this to your preferred region
 }
+
+
 
 locals {
   vpcs = {
@@ -377,3 +392,5 @@ output "backend_worker_nodes_sg_id" {
   description = "Security Group ID for Backend Worker Nodes"
   value       = aws_security_group.backend_worker_nodes.id
 }
+
+

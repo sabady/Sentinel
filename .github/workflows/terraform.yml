@@ -14,9 +14,17 @@ on:
     branches: [ main, develop ]
   workflow_dispatch:
     inputs:
-      environment:
-        description: 'Environment to deploy to'
+      action:
+        description: 'Action to perform'
         required: true
+        default: 'deploy'
+        type: choice
+        options:
+        - deploy
+        - destroy
+      environment:
+        description: 'Environment to deploy to (only for deploy action)'
+        required: false
         default: 'staging'
         type: choice
         options:
@@ -158,7 +166,7 @@ jobs:
     name: 'Terraform Apply (Manual)'
     runs-on: ubuntu-latest
     needs: terraform-verify
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'deploy'
     environment: ${{ github.event.inputs.environment }}
     
     steps:
@@ -185,3 +193,35 @@ jobs:
 
     - name: Terraform Apply
       run: terraform apply -auto-approve tfplan
+
+  terraform-destroy:
+    name: 'Terraform Destroy (Manual)'
+    runs-on: ubuntu-latest
+    needs: terraform-verify
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
+    environment: production
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Terraform Init
+      run: terraform init
+
+    - name: Terraform Plan Destroy
+      run: terraform plan -destroy -out=tfdestroy
+
+    - name: Terraform Destroy
+      run: terraform apply -auto-approve tfdestroy
