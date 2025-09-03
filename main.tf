@@ -137,11 +137,11 @@ resource "aws_security_group" "gateway_worker_nodes" {
 
   # Allow Kubernetes internal communication
   ingress {
-    from_port       = 0
-    to_port         = 65535
-    protocol        = "tcp"
-    cidr_blocks     = [module.vpc["vpc_gateway"].vpc_cidr_block]
-    description     = "Allow all TCP ports from VPC CIDR for internal communication"
+    from_port   = 0
+    to_port     = 65535
+    protocol    = "tcp"
+    cidr_blocks = [module.vpc["vpc_gateway"].vpc_cidr_block]
+    description = "Allow all TCP ports from VPC CIDR for internal communication"
   }
 
 
@@ -196,11 +196,11 @@ resource "aws_security_group" "backend_worker_nodes" {
 
   # Allow Kubernetes internal communication
   ingress {
-    from_port       = 0
-    to_port         = 65535
-    protocol        = "tcp"
-    cidr_blocks     = [module.vpc["vpc_backend"].vpc_cidr_block]
-    description     = "Allow all TCP ports from VPC CIDR for internal communication"
+    from_port   = 0
+    to_port     = 65535
+    protocol    = "tcp"
+    cidr_blocks = [module.vpc["vpc_backend"].vpc_cidr_block]
+    description = "Allow all TCP ports from VPC CIDR for internal communication"
   }
 
 
