@@ -2,8 +2,9 @@ terraform {
   required_version = ">= 1.0"
 
   # S3 Backend Configuration for Remote State Storage
+  # S3 Backend Configuration for Remote State Storage
   backend "s3" {
-    bucket       = "sentinel-terraform-state"
+    bucket       = "sentinel-terraform-state-721500739616"
     key          = "infrastructure/terraform.tfstate"
     region       = "us-west-2"
     encrypt      = true
@@ -24,6 +25,9 @@ terraform {
 provider "aws" {
   region = "us-west-2" # Change this to your preferred region
 }
+
+# Get current AWS account ID for unique bucket naming
+data "aws_caller_identity" "current" {}
 
 
 
