@@ -6,7 +6,7 @@ This document explains how to set up and use the S3 backend for storing Terrafor
 
 ### 1. Create the Backend Infrastructure
 
-First, you need to create the S3 bucket and DynamoDB table that will store your Terraform state:
+First, you need to create the S3 bucket that will store your Terraform state:
 
 ```bash
 # Navigate to the Sentinel project directory
@@ -14,8 +14,8 @@ cd /home/shany/Projects/Rapyd/Sentinel
 
 # Initialize and apply the backend configuration
 terraform init -backend=false
-terraform plan -target=aws_s3_bucket.terraform_state -target=aws_dynamodb_table.terraform_locks
-terraform apply -target=aws_s3_bucket.terraform_state -target=aws_dynamodb_table.terraform_locks
+terraform plan -target=aws_s3_bucket.terraform_state
+terraform apply -target=aws_s3_bucket.terraform_state
 ```
 
 ### 2. Initialize with S3 Backend
@@ -45,7 +45,7 @@ terraform apply
 ```
 /home/shany/Projects/Rapyd/Sentinel/
 ├── main.tf              # Main infrastructure configuration with S3 backend
-├── backend.tf           # S3 backend resources (run separately)
+├── backend.tf           # S3 bucket resources (run separately)
 ├── .github/workflows/   # GitHub Actions workflows
 └── BACKEND_SETUP.md     # This documentation
 ```
@@ -61,7 +61,7 @@ terraform {
     key            = "infrastructure/terraform.tfstate"
     region         = "us-west-2"
     encrypt        = true
-    dynamodb_table = "sentinel-terraform-locks"
+    use_lockfile   = true
   }
 }
 ```
@@ -71,25 +71,26 @@ terraform {
 - **Encryption**: State files are encrypted at rest using AES256
 - **Versioning**: S3 bucket versioning is enabled for state file history
 - **Public Access**: All public access is blocked
-- **State Locking**: DynamoDB table prevents concurrent modifications
+- **State Locking**: Local file-based locking prevents concurrent modifications
 - **Lifecycle**: Old state versions are automatically cleaned up after 30 days
 
 ## 🚨 Important Notes
 
 ### Backend Resources Must Exist First
-The S3 bucket and DynamoDB table must exist before you can use the S3 backend. This creates a chicken-and-egg problem that we solve by:
+The S3 bucket must exist before you can use the S3 backend. This creates a chicken-and-egg problem that we solve by:
 
-1. Running `backend.tf` first to create the backend infrastructure
+1. Running `backend.tf` first to create the S3 bucket
 2. Then using the S3 backend in `main.tf`
 
 ### State File Location
 - **S3 Bucket**: `sentinel-terraform-state`
 - **State File Path**: `infrastructure/terraform.tfstate`
 - **Region**: `us-west-2`
+- **Locking**: Local file-based locking (use_lockfile = true)
 
 ### Cost Considerations
 - **S3**: Minimal cost for state storage (typically < $1/month)
-- **DynamoDB**: Pay-per-request pricing for state locking
+- **Locking**: Free local file-based locking
 - **Data Transfer**: Free within the same region
 
 ## 🔄 Migration from Local State
@@ -99,7 +100,7 @@ If you're migrating from local state files:
 ```bash
 # 1. Create the backend infrastructure
 terraform init -backend=false
-terraform apply -target=aws_s3_bucket.terraform_state -target=aws_dynamodb_table.terraform_locks
+terraform apply -target=aws_s3_bucket.terraform_state
 
 # 2. Migrate your state
 terraform init -migrate-state
@@ -151,7 +152,7 @@ The GitHub Actions workflow includes:
    ```bash
    Error: Error acquiring the state lock
    ```
-   **Solution**: Check DynamoDB table exists and IAM permissions are correct
+   **Solution**: Check that the S3 bucket exists and IAM permissions are correct
 
 3. **Access Denied**
    ```bash
@@ -168,8 +169,8 @@ terraform show
 # Verify S3 bucket exists
 aws s3 ls s3://sentinel-terraform-state
 
-# Verify DynamoDB table exists
-aws dynamodb describe-table --table-name sentinel-terraform-locks
+# Verify S3 bucket exists and is accessible
+aws s3 ls s3://sentinel-terraform-state
 
 # Check IAM permissions
 aws sts get-caller-identity

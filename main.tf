@@ -3,14 +3,14 @@ terraform {
 
   # S3 Backend Configuration for Remote State Storage
   backend "s3" {
-    bucket         = "sentinel-terraform-state"
-    key            = "infrastructure/terraform.tfstate"
-    region         = "us-west-2"
-    encrypt        = true
-    dynamodb_table = "sentinel-terraform-locks"
+    bucket       = "sentinel-terraform-state"
+    key          = "infrastructure/terraform.tfstate"
+    region       = "us-west-2"
+    encrypt      = true
+    use_lockfile = true
 
-    # Enable state locking and consistency checking
-    # Note: The DynamoDB table must exist before running terraform init
+    # Enable state locking using lockfile instead of DynamoDB
+    # This provides local file-based locking for state consistency
   }
 
   required_providers {
