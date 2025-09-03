@@ -6,6 +6,10 @@ name: 'Terraform CI/CD'
 # 3. terraform-apply: Runs on push to main (production deployment)
 # 4. terraform-apply-develop: Runs on push to develop (staging deployment)
 # 5. terraform-apply-manual: Runs on manual dispatch (manual deployment)
+# 6. terraform-destroy: Runs on manual dispatch (manual destruction)
+
+# IMPORTANT: All jobs require AWS credentials because they use S3 backend for state storage
+# Make sure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets are configured in GitHub
 
 on:
   push:
@@ -49,6 +53,21 @@ jobs:
       with:
         terraform_version: ${{ env.TF_VERSION }}
 
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Verify AWS Credentials
+      run: |
+        echo "Verifying AWS credentials..."
+        aws sts get-caller-identity
+        echo "AWS region: ${{ env.AWS_REGION }}"
+        echo "Checking S3 bucket access..."
+        aws s3 ls s3://sentinel-terraform-state-721500739616 || echo "S3 bucket not accessible"
+
     - name: Terraform Format Check
       run: terraform fmt -check -recursive
       
@@ -79,6 +98,14 @@ jobs:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
+
+    - name: Verify AWS Credentials
+      run: |
+        echo "Verifying AWS credentials..."
+        aws sts get-caller-identity
+        echo "AWS region: ${{ env.AWS_REGION }}"
+        echo "Checking S3 bucket access..."
+        aws s3 ls s3://sentinel-terraform-state-721500739616 || echo "S3 bucket not accessible"
 
     - name: Terraform Init
       run: terraform init
@@ -115,6 +142,14 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
 
+    - name: Verify AWS Credentials
+      run: |
+        echo "Verifying AWS credentials..."
+        aws sts get-caller-identity
+        echo "AWS region: ${{ env.AWS_REGION }}"
+        echo "Checking S3 bucket access..."
+        aws s3 ls s3://sentinel-terraform-state-721500739616 || echo "S3 bucket not accessible"
+
     - name: Terraform Init
       run: terraform init
 
@@ -149,6 +184,14 @@ jobs:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
+
+    - name: Verify AWS Credentials
+      run: |
+        echo "Verifying AWS credentials..."
+        aws sts get-caller-identity
+        echo "AWS region: ${{ env.AWS_REGION }}"
+        echo "Checking S3 bucket access..."
+        aws s3 ls s3://sentinel-terraform-state-721500739616 || echo "S3 bucket not accessible"
 
     - name: Terraform Init
       run: terraform init
@@ -185,6 +228,14 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
 
+    - name: Verify AWS Credentials
+      run: |
+        echo "Verifying AWS credentials..."
+        aws sts get-caller-identity
+        echo "AWS region: ${{ env.AWS_REGION }}"
+        echo "Checking S3 bucket access..."
+        aws s3 ls s3://sentinel-terraform-state-721500739616 || echo "S3 bucket not accessible"
+
     - name: Terraform Init
       run: terraform init
 
@@ -216,6 +267,14 @@ jobs:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
+
+    - name: Verify AWS Credentials
+      run: |
+        echo "Verifying AWS credentials..."
+        aws sts get-caller-identity
+        echo "AWS region: ${{ env.AWS_REGION }}"
+        echo "Checking S3 bucket access..."
+        aws s3 ls s3://sentinel-terraform-state-721500739616 || echo "S3 bucket not accessible"
 
     - name: Terraform Init
       run: terraform init
