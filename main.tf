@@ -41,9 +41,10 @@ module "vpc" {
   private_subnets = each.value.private_subnets
   public_subnets  = each.value.public_subnets
 
+  # NAT Gateway Configuration: Single NAT Gateway per VPC for cost optimization
   enable_nat_gateway     = true
   single_nat_gateway     = true
-  one_nat_gateway_per_az = true
+  one_nat_gateway_per_az = false
 
   enable_dns_hostnames = true
   enable_dns_support   = true
@@ -106,15 +107,6 @@ resource "aws_security_group" "gateway_eks_cluster" {
   name_prefix = "gateway-eks-cluster-"
   vpc_id      = module.vpc["vpc_gateway"].vpc_id
 
-  # Allow EKS control plane to communicate with worker nodes
-  ingress {
-    from_port       = 443
-    to_port         = 443
-    protocol        = "tcp"
-    security_groups = [aws_security_group.gateway_worker_nodes.id]
-    description     = "Allow EKS control plane to communicate with worker nodes"
-  }
-
   egress {
     from_port   = 0
     to_port     = 0
@@ -152,14 +144,7 @@ resource "aws_security_group" "gateway_worker_nodes" {
     description     = "Allow all TCP ports from other worker nodes in same VPC"
   }
 
-  # Allow EKS control plane communication
-  ingress {
-    from_port       = 443
-    to_port         = 443
-    protocol        = "tcp"
-    security_groups = [aws_security_group.gateway_eks_cluster.id]
-    description     = "Allow EKS control plane to communicate with worker nodes"
-  }
+
 
   egress {
     from_port   = 0
@@ -180,15 +165,6 @@ resource "aws_security_group" "gateway_worker_nodes" {
 resource "aws_security_group" "backend_eks_cluster" {
   name_prefix = "backend-eks-cluster-"
   vpc_id      = module.vpc["vpc_backend"].vpc_id
-
-  # Allow EKS control plane to communicate with worker nodes
-  ingress {
-    from_port       = 443
-    to_port         = 443
-    protocol        = "tcp"
-    security_groups = [aws_security_group.backend_worker_nodes.id]
-    description     = "Allow EKS control plane to communicate with worker nodes"
-  }
 
   egress {
     from_port   = 0
@@ -227,14 +203,7 @@ resource "aws_security_group" "backend_worker_nodes" {
     description     = "Allow all TCP ports from other worker nodes in same VPC"
   }
 
-  # Allow EKS control plane communication
-  ingress {
-    from_port       = 443
-    to_port         = 443
-    protocol        = "tcp"
-    security_groups = [aws_security_group.backend_eks_cluster.id]
-    description     = "Allow EKS control plane to communicate with worker nodes"
-  }
+
 
   egress {
     from_port   = 0
@@ -354,14 +323,23 @@ output "vpc_backend_public_subnets" {
   value       = module.vpc["vpc_backend"].public_subnets
 }
 
-output "vpc_gateway_nat_gateway_ids" {
-  description = "List of NAT Gateway IDs in VPC Gateway"
-  value       = module.vpc["vpc_gateway"].nat_gateway_ids
+# Note: NAT Gateway outputs are not available from the VPC module
+# Use AWS CLI or console to view NAT Gateway information if needed
+# 
+# To get NAT Gateway information after deployment:
+# aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=${{ module.vpc["vpc_gateway"].vpc_id }}"
+# aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=${{ module.vpc["vpc_backend"].vpc_id }}"
+
+
+
+output "vpc_gateway_route_table_ids" {
+  description = "Route Table IDs in VPC Gateway"
+  value       = module.vpc["vpc_gateway"].private_route_table_ids
 }
 
-output "vpc_backend_nat_gateway_ids" {
-  description = "List of NAT Gateway IDs in VPC Backend"
-  value       = module.vpc["vpc_backend"].nat_gateway_ids
+output "vpc_backend_route_table_ids" {
+  description = "Route Table IDs in VPC Backend"
+  value       = module.vpc["vpc_backend"].private_route_table_ids
 }
 
 output "vpc_gateway_cidr_block" {
