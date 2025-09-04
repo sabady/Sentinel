@@ -1,0 +1,5 @@
+# Get the LoadBalancer external IP
+kubectl get service sentinel-proxy-loadbalancer
+
+# Access via browser
+http://<EXTERNAL-IP>
