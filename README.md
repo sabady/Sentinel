@@ -87,19 +87,21 @@ This project uses **GitHub OIDC federation** for secure AWS deployments without 
 
 2. **Configure GitHub secrets** with the role ARNs provided by the script
 
-#### Required Secrets (OIDC)
+#### Required Secrets (Temporary - Access Keys)
+
+**Note**: OIDC federation is temporarily disabled due to IAM permission restrictions. Using access keys for now.
 
 Add these secrets to your GitHub repository:
 
-1. **AWS_TERRAFORM_ROLE_ARN**: IAM role ARN for Terraform operations
-2. **AWS_EKS_ROLE_ARN**: IAM role ARN for EKS operations
-
-### Legacy Setup (Access Keys)
-
-If you prefer to use access keys instead of OIDC:
-
 1. **AWS_ACCESS_KEY_ID**: AWS access key with appropriate permissions
 2. **AWS_SECRET_ACCESS_KEY**: AWS secret access key
+
+### Future: OIDC Federation Setup
+
+Once IAM permissions are available, you can switch to OIDC federation:
+
+1. **AWS_TERRAFORM_ROLE_ARN**: IAM role ARN for Terraform operations
+2. **AWS_EKS_ROLE_ARN**: IAM role ARN for EKS operations
 
 ### Workflow Triggers
 
