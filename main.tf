@@ -480,7 +480,7 @@ module "eks" {
   version  = "~> 20.0"
 
   cluster_name    = "eks-${each.value.name}"
-  cluster_version = "1.28"
+  cluster_version = "1.31"
 
   vpc_id     = module.vpc[each.key].vpc_id
   subnet_ids = module.vpc[each.key].private_subnets

@@ -26,7 +26,7 @@ This repository contains Terraform configuration for a multi-VPC AWS infrastruct
 - Single NAT Gateway per VPC for cost optimization
 
 ### EKS Configuration
-- Kubernetes version: 1.28
+- Kubernetes version: 1.31
 - Node groups: t4g.medium spot instances
 - Auto-scaling: 1-3 nodes with 2 desired nodes
 - ARM64 architecture (Graviton2) for cost efficiency
