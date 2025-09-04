@@ -170,7 +170,7 @@ resource "aws_route53_record" "gateway_proxy" {
 
   records = [
     # This will be updated by External DNS or manually with LoadBalancer IP
-    "10.0.1.10"  # Placeholder - will be replaced with actual LoadBalancer IP
+    "10.0.1.10" # Placeholder - will be replaced with actual LoadBalancer IP
   ]
 }
 
@@ -182,7 +182,7 @@ resource "aws_route53_record" "backend_service" {
 
   records = [
     # This will be updated by External DNS or manually with service IP
-    "10.1.1.10"  # Placeholder - will be replaced with actual service IP
+    "10.1.1.10" # Placeholder - will be replaced with actual service IP
   ]
 }
 
