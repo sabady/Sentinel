@@ -2,10 +2,10 @@ name: 'Terraform CI/CD'
 
 # Workflow Flow:
 # 1. terraform-verify: Always runs (validation, format check, init)
-# 2. terraform-plan: Runs on PRs and pushes to main/develop (creates execution plan)
+# 2. terraform-plan: Runs on PRs and pushes to main (creates execution plan)
 # 3. terraform-apply: Runs on push to main (production deployment)
-# 4. terraform-apply-develop: Runs on push to develop (staging deployment)
-# 5. terraform-apply-manual: Runs on manual dispatch (manual deployment)
+# 4. terraform-apply-manual: Runs on manual dispatch (manual deployment)
+# 5. deploy-backend-app: Runs after successful apply (deploys backend application)
 # 6. terraform-destroy: Runs on manual dispatch (manual destruction)
 
 # IMPORTANT: This workflow uses GitHub OIDC federation for secure AWS access
@@ -14,9 +14,9 @@ name: 'Terraform CI/CD'
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
   workflow_dispatch:
     inputs:
       action:
@@ -82,7 +82,7 @@ jobs:
     name: 'Terraform Plan'
     runs-on: ubuntu-latest
     needs: terraform-verify
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     
     steps:
     - name: Checkout
@@ -126,80 +126,6 @@ jobs:
     needs: [terraform-verify, terraform-plan]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: production
-    
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: ${{ env.TF_VERSION }}
-
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: ${{ secrets.AWS_TERRAFORM_ROLE_ARN }}
-        aws-region: ${{ env.AWS_REGION }}
-        role-session-name: GitHubActions-Terraform-Verify
-
-    - name: Verify AWS Credentials
-      run: |
-        echo "Verifying AWS credentials..."
-        aws sts get-caller-identity
-        echo "AWS region: ${{ env.AWS_REGION }}"
-        echo "Checking S3 bucket access..."
-        aws s3 ls s3://sentinel-terraform-state-721500739616 || echo "S3 bucket not accessible"
-
-    - name: Terraform Init
-      run: terraform init
-
-    - name: Download Terraform Plan
-      uses: actions/download-artifact@v4
-      with:
-        name: terraform-plan
-        path: .
-
-    - name: Terraform Apply
-      run: terraform apply -auto-approve tfplan
-
-    - name: Configure AWS Credentials for EKS
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: ${{ secrets.AWS_EKS_ROLE_ARN }}
-        aws-region: ${{ env.AWS_REGION }}
-        role-session-name: GitHubActions-EKS-Gateway
-
-    - name: Configure kubectl for Gateway EKS
-      run: |
-        aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name eks-vpc-gateway
-        kubectl get nodes
-
-    - name: Deploy External DNS to Gateway EKS
-      run: |
-        kubectl apply -f k8s/external-dns/external-dns.yaml
-        kubectl rollout status deployment/external-dns -n kube-system --timeout=300s
-        echo "✅ External DNS deployed to Gateway EKS cluster"
-
-    - name: Deploy Proxy to Gateway EKS
-      run: |
-        kubectl apply -f k8s/gateway/deployment.yaml
-        kubectl rollout status deployment/sentinel-proxy --timeout=300s
-        echo "✅ Proxy deployed to Gateway EKS cluster"
-
-    - name: Get LoadBalancer URL
-      run: |
-        echo "Waiting for LoadBalancer to be ready..."
-        kubectl wait --for=condition=ready pod -l app=sentinel-proxy --timeout=300s
-        kubectl get service sentinel-proxy-loadbalancer
-        echo "LoadBalancer service created. External IP will be available shortly."
-
-  terraform-apply-develop:
-    name: 'Terraform Apply (Develop)'
-    runs-on: ubuntu-latest
-    needs: [terraform-verify, terraform-plan]
-    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
-    environment: staging
     
     steps:
     - name: Checkout
@@ -342,8 +268,8 @@ jobs:
   deploy-backend-app:
     name: 'Deploy Backend Application'
     runs-on: ubuntu-latest
-    needs: [terraform-apply, terraform-apply-develop, terraform-apply-manual]
-    if: always() && (needs.terraform-apply.result == 'success' || needs.terraform-apply-develop.result == 'success' || needs.terraform-apply-manual.result == 'success')
+    needs: [terraform-apply, terraform-apply-manual]
+    if: always() && (needs.terraform-apply.result == 'success' || needs.terraform-apply-manual.result == 'success')
     
     steps:
     - name: Checkout

@@ -103,16 +103,17 @@ If you prefer to use access keys instead of OIDC:
 ### Workflow Triggers
 
 - **Push to main**: Automatically applies changes to production
-- **Push to develop**: Automatically applies changes to staging
 - **Pull Request**: Runs verification and planning
-- **Manual Dispatch**: Allows manual deployment to staging/production
+- **Manual Dispatch**: Allows manual deployment to production
 
 ### Workflow Jobs
 
 1. **terraform-verify**: Format check, init, and validation
 2. **terraform-plan**: Creates and uploads execution plan (PR only)
 3. **terraform-apply**: Applies changes to production (main branch only)
-4. **terraform-apply-manual**: Manual deployment with environment selection
+4. **terraform-apply-manual**: Manual deployment to production
+5. **deploy-backend-app**: Deploys backend application to EKS clusters
+6. **terraform-destroy**: Manual infrastructure destruction
 
 ## Security Considerations
 
