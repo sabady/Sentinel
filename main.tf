@@ -29,26 +29,26 @@ provider "aws" {
 # Get current AWS account ID for unique bucket naming
 data "aws_caller_identity" "current" {}
 
-# GitHub OIDC Identity Provider
-resource "aws_iam_openid_connect_provider" "github" {
-  url = "https://token.actions.githubusercontent.com"
-
-  client_id_list = [
-    "sts.amazonaws.com",
-  ]
-
-  thumbprint_list = [
-    "6938fd4d98bab03faadb97b34396831e3780aea1",
-    "1c58a3a8518e8759bf075b76b750d4f2df264fcd"
-  ]
-
-  tags = {
-    Name        = "github-oidc-provider"
-    Environment = "production"
-    Project     = "sentinel"
-    Terraform   = "true"
-  }
-}
+# GitHub OIDC Identity Provider - DISABLED (using AWS access keys instead)
+# resource "aws_iam_openid_connect_provider" "github" {
+#   url = "https://token.actions.githubusercontent.com"
+#
+#   client_id_list = [
+#     "sts.amazonaws.com",
+#   ]
+#
+#   thumbprint_list = [
+#     "6938fd4d98bab03faadb97b34396831e3780aea1",
+#     "1c58a3a8518e8759bf075b76b750d4f2df264fcd"
+#   ]
+#
+#   tags = {
+#     Name        = "github-oidc-provider"
+#     Environment = "production"
+#     Project     = "sentinel"
+#     Terraform   = "true"
+#   }
+# }
 
 
 
@@ -196,114 +196,115 @@ resource "aws_route53_record" "sentinel_app" {
   records = ["gateway.sentinel.local"]
 }
 
-# IAM Role for GitHub Actions - Terraform Operations
-resource "aws_iam_role" "github_actions_terraform" {
-  name = "github-actions-terraform-sentinel"
+# IAM Role for GitHub Actions - Terraform Operations - DISABLED (using AWS access keys instead)
+# resource "aws_iam_role" "github_actions_terraform" {
+#   name = "github-actions-terraform-sentinel"
+#
+#   assume_role_policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [
+#       {
+#         Effect = "Allow"
+#         Principal = {
+#           Federated = aws_iam_openid_connect_provider.github.arn
+#         }
+#         Action = "sts:AssumeRoleWithWebIdentity"
+#         Condition = {
+#           StringEquals = {
+#             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+#           }
+#           StringLike = {
+#             "token.actions.githubusercontent.com:sub" = "repo:${var.github_repository}:*"
+#           }
+#         }
+#       }
+#     ]
+#   })
+#
+#   tags = {
+#     Name        = "github-actions-terraform-role"
+#     Environment = "production"
+#     Project     = "sentinel"
+#     Terraform   = "true"
+#   }
+# }
 
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Federated = aws_iam_openid_connect_provider.github.arn
-        }
-        Action = "sts:AssumeRoleWithWebIdentity"
-        Condition = {
-          StringEquals = {
-            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          }
-          StringLike = {
-            "token.actions.githubusercontent.com:sub" = "repo:${var.github_repository}:*"
-          }
-        }
-      }
-    ]
-  })
+# IAM Role for GitHub Actions - EKS Operations - DISABLED (using AWS access keys instead)
+# This was a GitHub Actions specific role, not needed for EKS cluster operation
+# resource "aws_iam_role" "github_actions_eks" {
+#   name = "github-actions-eks-sentinel"
+#
+#   assume_role_policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [
+#       {
+#         Effect = "Allow"
+#         Principal = {
+#           Federated = aws_iam_openid_connect_provider.github.arn
+#         }
+#         Action = "sts:AssumeRoleWithWebIdentity"
+#         Condition = {
+#           StringEquals = {
+#             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+#           }
+#           StringLike = {
+#             "token.actions.githubusercontent.com:sub" = "repo:${var.github_repository}:*"
+#           }
+#         }
+#       }
+#     ]
+#   })
+#
+#   tags = {
+#     Name        = "github-actions-eks-role"
+#     Environment = "production"
+#     Project     = "sentinel"
+#     Terraform   = "true"
+#   }
+# }
 
-  tags = {
-    Name        = "github-actions-terraform-role"
-    Environment = "production"
-    Project     = "sentinel"
-    Terraform   = "true"
-  }
-}
-
-# IAM Role for GitHub Actions - EKS Operations
-resource "aws_iam_role" "github_actions_eks" {
-  name = "github-actions-eks-sentinel"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Federated = aws_iam_openid_connect_provider.github.arn
-        }
-        Action = "sts:AssumeRoleWithWebIdentity"
-        Condition = {
-          StringEquals = {
-            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          }
-          StringLike = {
-            "token.actions.githubusercontent.com:sub" = "repo:${var.github_repository}:*"
-          }
-        }
-      }
-    ]
-  })
-
-  tags = {
-    Name        = "github-actions-eks-role"
-    Environment = "production"
-    Project     = "sentinel"
-    Terraform   = "true"
-  }
-}
-
-# IAM Policy for Terraform Operations
-resource "aws_iam_policy" "github_actions_terraform" {
-  name        = "github-actions-terraform-sentinel"
-  description = "Policy for GitHub Actions to perform Terraform operations"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject",
-          "s3:ListBucket"
-        ]
-        Resource = [
-          "arn:aws:s3:::sentinel-terraform-state-721500739616",
-          "arn:aws:s3:::sentinel-terraform-state-721500739616/*"
-        ]
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "ec2:*",
-          "eks:*",
-          "iam:*",
-          "route53:*",
-          "sts:GetCallerIdentity"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-
-  tags = {
-    Name        = "github-actions-terraform-policy"
-    Environment = "production"
-    Project     = "sentinel"
-    Terraform   = "true"
-  }
-}
+# IAM Policy for Terraform Operations - DISABLED (using AWS access keys instead)
+# resource "aws_iam_policy" "github_actions_terraform" {
+#   name        = "github-actions-terraform-sentinel"
+#   description = "Policy for GitHub Actions to perform Terraform operations"
+#
+#   policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [
+#       {
+#         Effect = "Allow"
+#         Action = [
+#           "s3:GetObject",
+#           "s3:PutObject",
+#           "s3:DeleteObject",
+#           "s3:ListBucket"
+#         ]
+#         Resource = [
+#           "arn:aws:s3:::sentinel-terraform-state-721500739616",
+#           "arn:aws:s3:::sentinel-terraform-state-721500739616/*"
+#         ]
+#       },
+#       {
+#         Effect = "Allow"
+#         Action = [
+#           "ec2:*",
+#           "eks:*",
+#           "iam:*",
+#           "route53:*",
+#           "sts:GetCallerIdentity"
+#         ]
+#         Resource = "*"
+#       }
+#     ]
+#   })
+#
+#   tags = {
+#     Name        = "github-actions-terraform-policy"
+#     Environment = "production"
+#     Project     = "sentinel"
+#     Terraform   = "true"
+#   }
+# }
 
 # IAM Policy for EKS Operations
 resource "aws_iam_policy" "github_actions_eks" {
@@ -343,16 +344,16 @@ resource "aws_iam_policy" "github_actions_eks" {
   }
 }
 
-# Attach policies to roles
-resource "aws_iam_role_policy_attachment" "github_actions_terraform" {
-  role       = aws_iam_role.github_actions_terraform.name
-  policy_arn = aws_iam_policy.github_actions_terraform.arn
-}
-
-resource "aws_iam_role_policy_attachment" "github_actions_eks" {
-  role       = aws_iam_role.github_actions_eks.name
-  policy_arn = aws_iam_policy.github_actions_eks.arn
-}
+# Attach policies to roles - DISABLED (using AWS access keys instead)
+# resource "aws_iam_role_policy_attachment" "github_actions_terraform" {
+#   role       = aws_iam_role.github_actions_terraform.name
+#   policy_arn = aws_iam_policy.github_actions_terraform.arn
+# }
+#
+# resource "aws_iam_role_policy_attachment" "github_actions_eks" {
+#   role       = aws_iam_role.github_actions_eks.name
+#   policy_arn = aws_iam_policy.github_actions_eks.arn
+# }
 
 # Security Groups for EKS Clusters
 # Gateway VPC Security Groups
