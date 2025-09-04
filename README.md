@@ -66,9 +66,36 @@ terraform destroy
 
 ## GitHub Actions Setup
 
-### Required Secrets
+### OIDC Federation (Recommended)
+
+This project uses **GitHub OIDC federation** for secure AWS deployments without long-lived credentials.
+
+#### Quick Setup
+
+1. **Update repository information** in `variables.tf`:
+   ```hcl
+   variable "github_repository" {
+     default = "your-username/sentinel"  # Update this!
+   }
+   ```
+
+2. **Run the setup script**:
+   ```bash
+   ./scripts/setup-oidc.sh
+   ```
+
+3. **Configure GitHub secrets** with the role ARNs provided by the script
+
+#### Required Secrets (OIDC)
 
 Add these secrets to your GitHub repository:
+
+1. **AWS_TERRAFORM_ROLE_ARN**: IAM role ARN for Terraform operations
+2. **AWS_EKS_ROLE_ARN**: IAM role ARN for EKS operations
+
+### Legacy Setup (Access Keys)
+
+If you prefer to use access keys instead of OIDC:
 
 1. **AWS_ACCESS_KEY_ID**: AWS access key with appropriate permissions
 2. **AWS_SECRET_ACCESS_KEY**: AWS secret access key
@@ -76,6 +103,7 @@ Add these secrets to your GitHub repository:
 ### Workflow Triggers
 
 - **Push to main**: Automatically applies changes to production
+- **Push to develop**: Automatically applies changes to staging
 - **Pull Request**: Runs verification and planning
 - **Manual Dispatch**: Allows manual deployment to staging/production
 

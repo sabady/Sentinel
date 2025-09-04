@@ -29,6 +29,27 @@ provider "aws" {
 # Get current AWS account ID for unique bucket naming
 data "aws_caller_identity" "current" {}
 
+# GitHub OIDC Identity Provider
+resource "aws_iam_openid_connect_provider" "github" {
+  url = "https://token.actions.githubusercontent.com"
+
+  client_id_list = [
+    "sts.amazonaws.com",
+  ]
+
+  thumbprint_list = [
+    "6938fd4d98bab03faadb97b34396831e3780aea1",
+    "1c58a3a8518e8759bf075b76b750d4f2df264fcd"
+  ]
+
+  tags = {
+    Name        = "github-oidc-provider"
+    Environment = "production"
+    Project     = "sentinel"
+    Terraform   = "true"
+  }
+}
+
 
 
 locals {
@@ -118,6 +139,219 @@ resource "aws_route" "backend_private_to_gateway" {
   route_table_id            = module.vpc["vpc_backend"].private_route_table_ids[count.index]
   destination_cidr_block    = module.vpc["vpc_gateway"].vpc_cidr_block
   vpc_peering_connection_id = aws_vpc_peering_connection.gateway_to_backend.id
+}
+
+# Route 53 Private Hosted Zone for Sentinel
+resource "aws_route53_zone" "sentinel_private" {
+  name = "sentinel.local"
+
+  vpc {
+    vpc_id = module.vpc["vpc_gateway"].vpc_id
+  }
+
+  vpc {
+    vpc_id = module.vpc["vpc_backend"].vpc_id
+  }
+
+  tags = {
+    Name        = "sentinel-private-zone"
+    Environment = "production"
+    Project     = "sentinel"
+    Terraform   = "true"
+  }
+}
+
+# DNS Records for Services
+resource "aws_route53_record" "gateway_proxy" {
+  zone_id = aws_route53_zone.sentinel_private.zone_id
+  name    = "gateway.sentinel.local"
+  type    = "A"
+  ttl     = 300
+
+  records = [
+    # This will be updated by External DNS or manually with LoadBalancer IP
+    "10.0.1.10"  # Placeholder - will be replaced with actual LoadBalancer IP
+  ]
+}
+
+resource "aws_route53_record" "backend_service" {
+  zone_id = aws_route53_zone.sentinel_private.zone_id
+  name    = "backend.sentinel.local"
+  type    = "A"
+  ttl     = 300
+
+  records = [
+    # This will be updated by External DNS or manually with service IP
+    "10.1.1.10"  # Placeholder - will be replaced with actual service IP
+  ]
+}
+
+# CNAME for easy access
+resource "aws_route53_record" "sentinel_app" {
+  zone_id = aws_route53_zone.sentinel_private.zone_id
+  name    = "app.sentinel.local"
+  type    = "CNAME"
+  ttl     = 300
+
+  records = ["gateway.sentinel.local"]
+}
+
+# IAM Role for GitHub Actions - Terraform Operations
+resource "aws_iam_role" "github_actions_terraform" {
+  name = "github-actions-terraform-sentinel"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Federated = aws_iam_openid_connect_provider.github.arn
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+          }
+          StringLike = {
+            "token.actions.githubusercontent.com:sub" = "repo:${var.github_repository}:*"
+          }
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "github-actions-terraform-role"
+    Environment = "production"
+    Project     = "sentinel"
+    Terraform   = "true"
+  }
+}
+
+# IAM Role for GitHub Actions - EKS Operations
+resource "aws_iam_role" "github_actions_eks" {
+  name = "github-actions-eks-sentinel"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Federated = aws_iam_openid_connect_provider.github.arn
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+          }
+          StringLike = {
+            "token.actions.githubusercontent.com:sub" = "repo:${var.github_repository}:*"
+          }
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "github-actions-eks-role"
+    Environment = "production"
+    Project     = "sentinel"
+    Terraform   = "true"
+  }
+}
+
+# IAM Policy for Terraform Operations
+resource "aws_iam_policy" "github_actions_terraform" {
+  name        = "github-actions-terraform-sentinel"
+  description = "Policy for GitHub Actions to perform Terraform operations"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "arn:aws:s3:::sentinel-terraform-state-721500739616",
+          "arn:aws:s3:::sentinel-terraform-state-721500739616/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:*",
+          "eks:*",
+          "iam:*",
+          "route53:*",
+          "sts:GetCallerIdentity"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "github-actions-terraform-policy"
+    Environment = "production"
+    Project     = "sentinel"
+    Terraform   = "true"
+  }
+}
+
+# IAM Policy for EKS Operations
+resource "aws_iam_policy" "github_actions_eks" {
+  name        = "github-actions-eks-sentinel"
+  description = "Policy for GitHub Actions to perform EKS operations"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "eks:DescribeCluster",
+          "eks:ListClusters",
+          "eks:UpdateClusterConfig",
+          "eks:UpdateClusterVersion"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "iam:PassRole"
+        ]
+        Resource = [
+          "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/eks-*"
+        ]
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "github-actions-eks-policy"
+    Environment = "production"
+    Project     = "sentinel"
+    Terraform   = "true"
+  }
+}
+
+# Attach policies to roles
+resource "aws_iam_role_policy_attachment" "github_actions_terraform" {
+  role       = aws_iam_role.github_actions_terraform.name
+  policy_arn = aws_iam_policy.github_actions_terraform.arn
+}
+
+resource "aws_iam_role_policy_attachment" "github_actions_eks" {
+  role       = aws_iam_role.github_actions_eks.name
+  policy_arn = aws_iam_policy.github_actions_eks.arn
 }
 
 # Security Groups for EKS Clusters
@@ -395,6 +629,53 @@ output "backend_eks_cluster_sg_id" {
 output "backend_worker_nodes_sg_id" {
   description = "Security Group ID for Backend Worker Nodes"
   value       = aws_security_group.backend_worker_nodes.id
+}
+
+# DNS Outputs
+output "route53_zone_id" {
+  description = "Route 53 Private Hosted Zone ID for Sentinel"
+  value       = aws_route53_zone.sentinel_private.zone_id
+}
+
+output "route53_zone_name_servers" {
+  description = "Route 53 Private Hosted Zone Name Servers"
+  value       = aws_route53_zone.sentinel_private.name_servers
+}
+
+output "dns_gateway_url" {
+  description = "DNS URL for Gateway Service"
+  value       = "http://gateway.sentinel.local"
+}
+
+output "dns_backend_url" {
+  description = "DNS URL for Backend Service"
+  value       = "http://backend.sentinel.local"
+}
+
+output "dns_app_url" {
+  description = "DNS URL for Main Application"
+  value       = "http://app.sentinel.local"
+}
+
+# OIDC and IAM Outputs
+output "github_oidc_provider_arn" {
+  description = "ARN of the GitHub OIDC Identity Provider"
+  value       = aws_iam_openid_connect_provider.github.arn
+}
+
+output "github_actions_terraform_role_arn" {
+  description = "ARN of the GitHub Actions Terraform IAM Role"
+  value       = aws_iam_role.github_actions_terraform.arn
+}
+
+output "github_actions_eks_role_arn" {
+  description = "ARN of the GitHub Actions EKS IAM Role"
+  value       = aws_iam_role.github_actions_eks.arn
+}
+
+output "aws_account_id" {
+  description = "AWS Account ID"
+  value       = data.aws_caller_identity.current.account_id
 }
 
 

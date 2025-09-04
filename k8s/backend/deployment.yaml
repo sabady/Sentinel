@@ -1,0 +1,168 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-rapyd-backend
+  namespace: default
+  labels:
+    app: hello-rapyd-backend
+    project: sentinel
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hello-rapyd-backend
+  template:
+    metadata:
+      labels:
+        app: hello-rapyd-backend
+        project: sentinel
+    spec:
+      containers:
+      - name: hello-rapyd
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        env:
+        - name: NGINX_HOST
+          value: "localhost"
+        - name: NGINX_PORT
+          value: "80"
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d
+        - name: html-content
+          mountPath: /usr/share/nginx/html
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: hello-rapyd-config
+      - name: html-content
+        configMap:
+          name: hello-rapyd-html
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hello-rapyd-config
+  namespace: default
+  labels:
+    app: hello-rapyd-backend
+    project: sentinel
+data:
+  default.conf: |
+    server {
+        listen 80;
+        server_name localhost;
+        
+        location / {
+            root /usr/share/nginx/html;
+            index index.html;
+        }
+        
+        location /health {
+            access_log off;
+            return 200 "healthy\n";
+            add_header Content-Type text/plain;
+        }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hello-rapyd-html
+  namespace: default
+  labels:
+    app: hello-rapyd-backend
+    project: sentinel
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Hello Rapyd</title>
+        <style>
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                margin: 0;
+                padding: 0;
+                height: 100vh;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                color: white;
+            }
+            .container {
+                text-align: center;
+                background: rgba(255, 255, 255, 0.1);
+                padding: 3rem;
+                border-radius: 20px;
+                backdrop-filter: blur(10px);
+                box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+                border: 1px solid rgba(255, 255, 255, 0.18);
+            }
+            h1 {
+                font-size: 4rem;
+                margin: 0;
+                text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+                animation: fadeIn 2s ease-in;
+            }
+            p {
+                font-size: 1.2rem;
+                margin: 1rem 0 0 0;
+                opacity: 0.9;
+                animation: fadeIn 2s ease-in 0.5s both;
+            }
+            .status {
+                margin-top: 2rem;
+                padding: 1rem;
+                background: rgba(76, 175, 80, 0.2);
+                border-radius: 10px;
+                border: 1px solid rgba(76, 175, 80, 0.3);
+            }
+            @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(20px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Hello Rapyd</h1>
+            <p>Welcome to the Sentinel Backend Service</p>
+            <div class="status">
+                <strong>Status:</strong> Backend service is running successfully! 🚀
+            </div>
+        </div>
+    </body>
+    </html>
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-rapyd-backend-service
+  namespace: default
+  labels:
+    app: hello-rapyd-backend
+    project: sentinel
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: backend.sentinel.local
+    external-dns.alpha.kubernetes.io/ttl: "300"
+spec:
+  selector:
+    app: hello-rapyd-backend
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  type: ClusterIP

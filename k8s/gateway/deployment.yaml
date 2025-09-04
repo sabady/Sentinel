@@ -1,0 +1,228 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentinel-proxy
+  namespace: default
+  labels:
+    app: sentinel-proxy
+    project: sentinel
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sentinel-proxy
+  template:
+    metadata:
+      labels:
+        app: sentinel-proxy
+        project: sentinel
+    spec:
+      containers:
+      - name: nginx-proxy
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        env:
+        - name: NGINX_HOST
+          value: "localhost"
+        - name: NGINX_PORT
+          value: "80"
+        - name: BACKEND_SERVICE_URL
+          value: "http://backend.sentinel.local"
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d
+        - name: nginx-html
+          mountPath: /usr/share/nginx/html
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: sentinel-proxy-config
+      - name: nginx-html
+        configMap:
+          name: sentinel-proxy-html
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sentinel-proxy-config
+  namespace: default
+  labels:
+    app: sentinel-proxy
+    project: sentinel
+data:
+  default.conf: |
+    upstream backend {
+        server backend.sentinel.local:80;
+    }
+    
+    server {
+        listen 80;
+        server_name _;
+        
+        # Health check endpoint
+        location /health {
+            access_log off;
+            return 200 "proxy healthy\n";
+            add_header Content-Type text/plain;
+        }
+        
+        # Proxy all other requests to backend
+        location / {
+            proxy_pass http://backend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # Timeout settings
+            proxy_connect_timeout 5s;
+            proxy_send_timeout 10s;
+            proxy_read_timeout 10s;
+            
+            # Error handling
+            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+            proxy_next_upstream_tries 3;
+            proxy_next_upstream_timeout 10s;
+        }
+        
+        # Error pages
+        error_page 502 503 504 /50x.html;
+        location = /50x.html {
+            root /usr/share/nginx/html;
+        }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sentinel-proxy-html
+  namespace: default
+  labels:
+    app: sentinel-proxy
+    project: sentinel
+data:
+  50x.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Service Temporarily Unavailable</title>
+        <style>
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+                margin: 0;
+                padding: 0;
+                height: 100vh;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                color: white;
+            }
+            .container {
+                text-align: center;
+                background: rgba(255, 255, 255, 0.1);
+                padding: 3rem;
+                border-radius: 20px;
+                backdrop-filter: blur(10px);
+                box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+                border: 1px solid rgba(255, 255, 255, 0.18);
+            }
+            h1 {
+                font-size: 3rem;
+                margin: 0;
+                text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            }
+            p {
+                font-size: 1.2rem;
+                margin: 1rem 0 0 0;
+                opacity: 0.9;
+            }
+            .retry {
+                margin-top: 2rem;
+                padding: 1rem 2rem;
+                background: rgba(255, 255, 255, 0.2);
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                border-radius: 10px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+            }
+            .retry:hover {
+                background: rgba(255, 255, 255, 0.3);
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>⚠️ Service Unavailable</h1>
+            <p>The backend service is temporarily unavailable.</p>
+            <p>Please try again in a few moments.</p>
+            <div class="retry" onclick="window.location.reload()">
+                <strong>🔄 Retry</strong>
+            </div>
+        </div>
+    </body>
+    </html>
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentinel-proxy-service
+  namespace: default
+  labels:
+    app: sentinel-proxy
+    project: sentinel
+spec:
+  selector:
+    app: sentinel-proxy
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentinel-proxy-loadbalancer
+  namespace: default
+  labels:
+    app: sentinel-proxy
+    project: sentinel
+    service-type: loadbalancer
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: gateway.sentinel.local
+    external-dns.alpha.kubernetes.io/ttl: "300"
+spec:
+  selector:
+    app: sentinel-proxy
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  type: LoadBalancer
+  loadBalancerSourceRanges:
+  - 0.0.0.0/0  # Allow access from anywhere (adjust as needed for security)
