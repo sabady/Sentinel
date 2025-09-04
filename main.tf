@@ -8,9 +8,6 @@ terraform {
     region       = "us-west-2"
     encrypt      = true
     use_lockfile = true
-
-    # Enable state locking using lockfile instead of DynamoDB
-    # This provides local file-based locking for state consistency
   }
 
   required_providers {
