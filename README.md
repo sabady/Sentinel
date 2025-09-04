@@ -186,11 +186,23 @@ aws eks update-kubeconfig --region us-west-2 --name eks-vpc-backend
 
 ### Common Issues
 1. **VPC Peering**: Ensure route tables are properly configured
-2. **Security Groups**: Verify ingress/egress rules match requirements
+2. **Security Groups**: EKS now manages security groups automatically to prevent cross-reference issues
 3. **NAT Gateway**: Check public subnet and internet gateway configuration
 4. **EKS**: Verify security group associations and subnet configurations
 5. **OIDC**: Check GitHub repository name in `variables.tf`
 6. **DNS**: Verify Route 53 private hosted zone configuration
+7. **Resource Cleanup**: Use the enhanced cleanup script to prevent cross-reference issues
+
+### Cleanup Scripts
+
+If you need to manually clean up AWS resources:
+
+```bash
+# Use the enhanced cleanup script
+./scripts/cleanup-aws-resources.sh
+```
+
+This script handles EKS-managed security groups and prevents cross-reference issues that previously prevented VPC deletion.
 
 ### Debugging Commands
 ```bash

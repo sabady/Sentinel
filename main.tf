@@ -367,11 +367,17 @@ resource "aws_security_group" "gateway_eks_cluster" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Ensure proper cleanup order
+  lifecycle {
+    create_before_destroy = true
+  }
+
   tags = {
     Name        = "gateway-eks-cluster-sg"
     Environment = "production"
     Project     = "sentinel"
     VPC         = "vpc_gateway"
+    ManagedBy   = "terraform"
   }
 }
 
@@ -406,11 +412,17 @@ resource "aws_security_group" "gateway_worker_nodes" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Ensure proper cleanup order
+  lifecycle {
+    create_before_destroy = true
+  }
+
   tags = {
     Name        = "gateway-worker-nodes-sg"
     Environment = "production"
     Project     = "sentinel"
     VPC         = "vpc_gateway"
+    ManagedBy   = "terraform"
   }
 }
 
@@ -426,11 +438,17 @@ resource "aws_security_group" "backend_eks_cluster" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Ensure proper cleanup order
+  lifecycle {
+    create_before_destroy = true
+  }
+
   tags = {
     Name        = "backend-eks-cluster-sg"
     Environment = "production"
     Project     = "sentinel"
     VPC         = "vpc_backend"
+    ManagedBy   = "terraform"
   }
 }
 
@@ -465,11 +483,17 @@ resource "aws_security_group" "backend_worker_nodes" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Ensure proper cleanup order
+  lifecycle {
+    create_before_destroy = true
+  }
+
   tags = {
     Name        = "backend-worker-nodes-sg"
     Environment = "production"
     Project     = "sentinel"
     VPC         = "vpc_backend"
+    ManagedBy   = "terraform"
   }
 }
 
@@ -507,10 +531,11 @@ module "eks" {
       instance_types = ["t4g.medium"]
       capacity_type  = "SPOT"
 
-      # Node Group Security Group
-      vpc_security_group_ids = [
-        each.key == "vpc_gateway" ? aws_security_group.gateway_worker_nodes.id : aws_security_group.backend_worker_nodes.id
-      ]
+      # Let EKS manage node group security groups automatically
+      # This prevents cross-reference issues and ensures proper cleanup
+      # vpc_security_group_ids = [
+      #   each.key == "vpc_gateway" ? aws_security_group.gateway_worker_nodes.id : aws_security_group.backend_worker_nodes.id
+      # ]
 
       labels = {
         Environment  = "production"
@@ -528,8 +553,14 @@ module "eks" {
     }
   }
 
-  # Cluster Security Group
-  cluster_security_group_id = each.key == "vpc_gateway" ? aws_security_group.gateway_eks_cluster.id : aws_security_group.backend_eks_cluster.id
+  # Let EKS manage security groups automatically to avoid cross-reference issues
+  # This prevents the cross-reference problems we encountered during cleanup
+  # cluster_security_group_id = each.key == "vpc_gateway" ? aws_security_group.gateway_eks_cluster.id : aws_security_group.backend_eks_cluster.id
+
+  # EKS will create and manage its own security groups
+  # This ensures proper cleanup and avoids cross-reference issues
+  create_cluster_security_group = true
+  create_node_security_group    = true
 
   # Tags
   cluster_tags = {
@@ -543,6 +574,31 @@ module "eks" {
     Project     = "sentinel"
     VPC         = each.value.name
   }
+}
+
+# Additional Security Group Rules for EKS-Managed Security Groups
+# These rules will be applied to the EKS-managed security groups to ensure proper communication
+
+# Gateway EKS Node Group - Allow HTTP from internet
+resource "aws_security_group_rule" "gateway_eks_nodes_http" {
+  type              = "ingress"
+  from_port         = 80
+  to_port           = 80
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  description       = "Allow HTTP from internet to gateway EKS nodes"
+  security_group_id = module.eks["vpc_gateway"].node_security_group_id
+}
+
+# Backend EKS Node Group - Allow HTTP from Gateway VPC only
+resource "aws_security_group_rule" "backend_eks_nodes_http_from_gateway" {
+  type                     = "ingress"
+  from_port                = 80
+  to_port                  = 80
+  protocol                 = "tcp"
+  source_security_group_id = module.eks["vpc_gateway"].node_security_group_id
+  description              = "Allow HTTP from gateway EKS nodes to backend EKS nodes"
+  security_group_id        = module.eks["vpc_backend"].node_security_group_id
 }
 
 # Outputs
