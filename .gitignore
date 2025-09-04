@@ -39,7 +39,6 @@ backend.tf
 
 # Terraform sensitive files
 secrets.tf
-variables.tf
 providers.tf
 
 # =============================================================================
