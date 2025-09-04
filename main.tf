@@ -715,20 +715,21 @@ output "dns_app_url" {
 }
 
 # OIDC and IAM Outputs
-output "github_oidc_provider_arn" {
-  description = "ARN of the GitHub OIDC Identity Provider"
-  value       = aws_iam_openid_connect_provider.github.arn
-}
-
-output "github_actions_terraform_role_arn" {
-  description = "ARN of the GitHub Actions Terraform IAM Role"
-  value       = aws_iam_role.github_actions_terraform.arn
-}
-
-output "github_actions_eks_role_arn" {
-  description = "ARN of the GitHub Actions EKS IAM Role"
-  value       = aws_iam_role.github_actions_eks.arn
-}
+# OIDC and GitHub Actions outputs - DISABLED (using AWS access keys instead)
+# output "github_oidc_provider_arn" {
+#   description = "ARN of the GitHub OIDC Identity Provider"
+#   value       = aws_iam_openid_connect_provider.github.arn
+# }
+#
+# output "github_actions_terraform_role_arn" {
+#   description = "ARN of the GitHub Actions Terraform IAM Role"
+#   value       = aws_iam_role.github_actions_terraform.arn
+# }
+#
+# output "github_actions_eks_role_arn" {
+#   description = "ARN of the GitHub Actions EKS IAM Role"
+#   value       = aws_iam_role.github_actions_eks.arn
+# }
 
 output "aws_account_id" {
   description = "AWS Account ID"
