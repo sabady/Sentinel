@@ -16,6 +16,8 @@ This repository contains Terraform configuration for a multi-VPC AWS infrastruct
 - VPC peering between gateway and backend VPCs
 - NAT Gateways for internet access from private subnets
 - Security groups with proper access controls
+- Route 53 private hosted zones for DNS resolution
+- External DNS for automatic DNS record management
 
 ## Infrastructure Components
 
@@ -36,11 +38,17 @@ This repository contains Terraform configuration for a multi-VPC AWS infrastruct
 - **Backend VPC**: Accepts HTTP traffic from gateway VPC only
 - **Both VPCs**: Full Kubernetes internal communication support
 
+### Applications
+- **Backend Service**: "Hello Rapyd" web application in backend EKS
+- **Gateway Proxy**: Nginx proxy with LoadBalancer in gateway EKS
+- **DNS Resolution**: Cross-VPC DNS resolution via Route 53
+
 ## Prerequisites
 
 - AWS CLI configured with appropriate credentials
 - Terraform >= 1.0
 - kubectl for EKS cluster management
+- GitHub repository with Actions enabled
 
 ## Local Development
 
@@ -72,19 +80,12 @@ This project uses **GitHub OIDC federation** for secure AWS deployments without 
 
 #### Quick Setup
 
-1. **Update repository information** in `variables.tf`:
-   ```hcl
-   variable "github_repository" {
-     default = "your-username/sentinel"  # Update this!
-   }
-   ```
-
-2. **Run the setup script**:
+1. **Run the setup script**:
    ```bash
    ./scripts/setup-oidc.sh
    ```
 
-3. **Configure GitHub secrets** with the role ARNs provided by the script
+2. **Configure GitHub secrets** with the role ARNs provided by the script
 
 #### Required Secrets (OIDC)
 
@@ -129,6 +130,27 @@ If you prefer to use access keys instead of OIDC:
 - ARM64 instances (t4g.medium) for better price/performance
 - Auto-scaling node groups
 
+## Applications and DNS
+
+### Deployed Applications
+- **Backend**: "Hello Rapyd" web application accessible via `backend.sentinel.local`
+- **Gateway**: Nginx proxy accessible via `gateway.sentinel.local` and public LoadBalancer
+- **Main App**: Accessible via `app.sentinel.local` (CNAME to gateway)
+
+### DNS Resolution
+- **Private DNS Zone**: `sentinel.local` for internal VPC communication
+- **External DNS**: Automatically manages DNS records from Kubernetes services
+- **Cross-VPC Resolution**: Services can resolve each other via DNS names
+
+### Accessing Applications
+```bash
+# Get LoadBalancer external IP
+kubectl get service sentinel-proxy-loadbalancer
+
+# Access via browser
+http://<EXTERNAL-IP>
+```
+
 ## Monitoring and Maintenance
 
 ### EKS Cluster Management
@@ -145,6 +167,19 @@ aws eks update-kubeconfig --region us-west-2 --name eks-vpc-backend
 - Spot instance interruption handling
 - Health checks and replacement
 
+## Scripts and Documentation
+
+### Available Scripts
+- **`scripts/setup-oidc.sh`**: Automated OIDC setup and configuration
+- **`scripts/test-dns.sh`**: Comprehensive DNS resolution testing
+- **`destroy_all.sh`**: Complete infrastructure cleanup
+
+### Documentation
+- **`OIDC_SETUP.md`**: Detailed GitHub OIDC federation guide
+- **`DNS_SETUP.md`**: DNS resolution configuration and troubleshooting
+- **`BACKEND_SETUP.md`**: S3 backend setup instructions
+- **`k8s/README.md`**: Kubernetes applications documentation
+
 ## Troubleshooting
 
 ### Common Issues
@@ -152,6 +187,8 @@ aws eks update-kubeconfig --region us-west-2 --name eks-vpc-backend
 2. **Security Groups**: Verify ingress/egress rules match requirements
 3. **NAT Gateway**: Check public subnet and internet gateway configuration
 4. **EKS**: Verify security group associations and subnet configurations
+5. **OIDC**: Check GitHub repository name in `variables.tf`
+6. **DNS**: Verify Route 53 private hosted zone configuration
 
 ### Debugging Commands
 ```bash
@@ -163,11 +200,17 @@ aws ec2 describe-security-groups --group-ids <sg-id>
 
 # Check EKS cluster status
 aws eks describe-cluster --name eks-vpc-gateway --region us-west-2
+
+# Test DNS resolution
+./scripts/test-dns.sh
+
+# Check OIDC setup
+./scripts/setup-oidc.sh
 ```
 
 ## Contributing
 
-1. Create a feature branch from `develop`
+1. Create a feature branch from `main`
 2. Make changes and test locally
 3. Create a pull request
 4. Ensure all checks pass
