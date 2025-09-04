@@ -41,6 +41,10 @@ backend.tf
 secrets.tf
 providers.tf
 
+# Cleanup and utility scripts (temporary)
+destroy_all.sh
+cleanup-security-groups.sh
+
 # =============================================================================
 # AWS AND CLOUD FILES
 # =============================================================================
