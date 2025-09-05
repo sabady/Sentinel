@@ -1,5 +1,9 @@
 name: 'Terraform CI/CD'
 
+# NOTE: OIDC Federation is disabled due to IAM permission restrictions
+# All AWS operations use AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets
+# TODO: Re-enable OIDC when IAM permissions are available
+
 # Workflow Flow:
 # 1. terraform-verify: Always runs (validation, format check, init)
 # 2. terraform-plan: Runs on PRs and pushes to main (creates execution plan)
@@ -170,24 +174,39 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
 
+    - name: Check if Gateway EKS cluster exists
+      run: |
+        if ! aws eks describe-cluster --name eks-vpc-gateway --region ${{ env.AWS_REGION }} 2>/dev/null; then
+          echo "❌ Gateway EKS cluster 'eks-vpc-gateway' not found - skipping deployment"
+          echo "cluster_exists=false" >> $GITHUB_OUTPUT
+        else
+          echo "✅ Gateway EKS cluster found"
+          echo "cluster_exists=true" >> $GITHUB_OUTPUT
+        fi
+      id: check-gateway-cluster
+
     - name: Configure kubectl for Gateway EKS
+      if: steps.check-gateway-cluster.outputs.cluster_exists == 'true'
       run: |
         aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name eks-vpc-gateway
         kubectl get nodes
 
     - name: Deploy External DNS to Gateway EKS
+      if: steps.check-gateway-cluster.outputs.cluster_exists == 'true'
       run: |
         kubectl apply -f k8s/external-dns/external-dns.yaml
         kubectl rollout status deployment/external-dns -n kube-system --timeout=300s
         echo "✅ External DNS deployed to Gateway EKS cluster"
 
     - name: Deploy Proxy to Gateway EKS
+      if: steps.check-gateway-cluster.outputs.cluster_exists == 'true'
       run: |
         kubectl apply -f k8s/gateway/deployment.yaml
         kubectl rollout status deployment/sentinel-proxy --timeout=300s
         echo "✅ Proxy deployed to Gateway EKS cluster"
 
     - name: Get LoadBalancer URL
+      if: steps.check-gateway-cluster.outputs.cluster_exists == 'true'
       run: |
         echo "Waiting for LoadBalancer to be ready..."
         kubectl wait --for=condition=ready pod -l app=sentinel-proxy --timeout=300s
@@ -241,24 +260,39 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
 
+    - name: Check if Gateway EKS cluster exists
+      run: |
+        if ! aws eks describe-cluster --name eks-vpc-gateway --region ${{ env.AWS_REGION }} 2>/dev/null; then
+          echo "❌ Gateway EKS cluster 'eks-vpc-gateway' not found - skipping deployment"
+          echo "cluster_exists=false" >> $GITHUB_OUTPUT
+        else
+          echo "✅ Gateway EKS cluster found"
+          echo "cluster_exists=true" >> $GITHUB_OUTPUT
+        fi
+      id: check-gateway-cluster
+
     - name: Configure kubectl for Gateway EKS
+      if: steps.check-gateway-cluster.outputs.cluster_exists == 'true'
       run: |
         aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name eks-vpc-gateway
         kubectl get nodes
 
     - name: Deploy External DNS to Gateway EKS
+      if: steps.check-gateway-cluster.outputs.cluster_exists == 'true'
       run: |
         kubectl apply -f k8s/external-dns/external-dns.yaml
         kubectl rollout status deployment/external-dns -n kube-system --timeout=300s
         echo "✅ External DNS deployed to Gateway EKS cluster"
 
     - name: Deploy Proxy to Gateway EKS
+      if: steps.check-gateway-cluster.outputs.cluster_exists == 'true'
       run: |
         kubectl apply -f k8s/gateway/deployment.yaml
         kubectl rollout status deployment/sentinel-proxy --timeout=300s
         echo "✅ Proxy deployed to Gateway EKS cluster"
 
     - name: Get LoadBalancer URL
+      if: steps.check-gateway-cluster.outputs.cluster_exists == 'true'
       run: |
         echo "Waiting for LoadBalancer to be ready..."
         kubectl wait --for=condition=ready pod -l app=sentinel-proxy --timeout=300s
@@ -285,28 +319,43 @@ jobs:
     - name: Configure AWS Credentials for EKS
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        role-to-assume: ${{ secrets.AWS_EKS_ROLE_ARN }}
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
-        role-session-name: GitHubActions-EKS-Backend
+
+    - name: Check if Backend EKS cluster exists
+      run: |
+        if ! aws eks describe-cluster --name eks-vpc-backend --region ${{ env.AWS_REGION }} 2>/dev/null; then
+          echo "❌ Backend EKS cluster 'eks-vpc-backend' not found - skipping deployment"
+          echo "cluster_exists=false" >> $GITHUB_OUTPUT
+        else
+          echo "✅ Backend EKS cluster found"
+          echo "cluster_exists=true" >> $GITHUB_OUTPUT
+        fi
+      id: check-backend-cluster
 
     - name: Configure kubectl for Backend EKS
+      if: steps.check-backend-cluster.outputs.cluster_exists == 'true'
       run: |
         aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name eks-vpc-backend
         kubectl get nodes
 
     - name: Deploy External DNS to Backend EKS
+      if: steps.check-backend-cluster.outputs.cluster_exists == 'true'
       run: |
         kubectl apply -f k8s/external-dns/external-dns.yaml
         kubectl rollout status deployment/external-dns -n kube-system --timeout=300s
         echo "✅ External DNS deployed to Backend EKS cluster"
 
     - name: Deploy Backend Application
+      if: steps.check-backend-cluster.outputs.cluster_exists == 'true'
       run: |
         kubectl apply -f k8s/backend/deployment.yaml
         kubectl rollout status deployment/hello-rapyd-backend --timeout=300s
         echo "✅ Backend application deployed to Backend EKS cluster"
 
     - name: Verify Backend Deployment
+      if: steps.check-backend-cluster.outputs.cluster_exists == 'true'
       run: |
         kubectl get pods -l app=hello-rapyd-backend
         kubectl get services
