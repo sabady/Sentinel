@@ -1,0 +1,353 @@
+name: 'Terraform CI/CD'
+
+# Workflow Flow:
+# 1. terraform-verify: Always runs (validation, format check, init)
+# 2. terraform-plan: Runs on PRs and pushes to main (creates execution plan)
+# 3. terraform-apply: Runs on push to main (production deployment)
+# 4. terraform-apply-manual: Runs on manual dispatch (manual deployment)
+# 5. deploy-backend-app: Runs after successful apply (deploys backend application)
+# 6. terraform-destroy: Runs on manual dispatch (manual destruction)
+
+# IMPORTANT: This workflow temporarily uses AWS access keys for deployment
+# Make sure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets are configured in GitHub
+# TODO: Switch to OIDC federation once IAM permissions are available
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'deploy'
+        type: choice
+        options:
+        - deploy
+        - destroy
+      environment:
+        description: 'Environment to deploy to (only for deploy action)'
+        required: false
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+
+env:
+  TF_VERSION: '1.13.1'
+  AWS_REGION: 'us-west-2'
+
+jobs:
+  terraform-verify:
+    name: 'Terraform Verify'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Verify AWS Credentials
+      run: |
+        echo "Verifying AWS credentials..."
+        aws sts get-caller-identity
+        echo "AWS region: ${{ env.AWS_REGION }}"
+        echo "Checking S3 bucket access..."
+        aws s3 ls s3://sentinel-terraform-state-721500739616 || echo "S3 bucket not accessible"
+
+    - name: Terraform Format Check
+      run: terraform fmt -check -recursive
+      
+    - name: Terraform Init
+      run: terraform init
+      
+    - name: Terraform Validate
+      run: terraform validate
+
+  terraform-plan:
+    name: 'Terraform Plan'
+    runs-on: ubuntu-latest
+    needs: terraform-verify
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Verify AWS Credentials
+      run: |
+        echo "Verifying AWS credentials..."
+        aws sts get-caller-identity
+        echo "AWS region: ${{ env.AWS_REGION }}"
+        echo "Checking S3 bucket access..."
+        aws s3 ls s3://sentinel-terraform-state-721500739616 || echo "S3 bucket not accessible"
+
+    - name: Terraform Init
+      run: terraform init
+
+    - name: Terraform Plan
+      run: terraform plan -out=tfplan
+      
+    - name: Upload Terraform Plan
+      uses: actions/upload-artifact@v4
+      with:
+        name: terraform-plan
+        path: tfplan
+
+  terraform-apply:
+    name: 'Terraform Apply'
+    runs-on: ubuntu-latest
+    needs: [terraform-verify, terraform-plan]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Verify AWS Credentials
+      run: |
+        echo "Verifying AWS credentials..."
+        aws sts get-caller-identity
+        echo "AWS region: ${{ env.AWS_REGION }}"
+        echo "Checking S3 bucket access..."
+        aws s3 ls s3://sentinel-terraform-state-721500739616 || echo "S3 bucket not accessible"
+
+    - name: Terraform Init
+      run: terraform init
+
+    - name: Download Terraform Plan
+      uses: actions/download-artifact@v4
+      with:
+        name: terraform-plan
+        path: .
+
+    - name: Terraform Apply
+      run: terraform apply -auto-approve tfplan
+
+    - name: Configure AWS Credentials for EKS
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Configure kubectl for Gateway EKS
+      run: |
+        aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name eks-vpc-gateway
+        kubectl get nodes
+
+    - name: Deploy External DNS to Gateway EKS
+      run: |
+        kubectl apply -f k8s/external-dns/external-dns.yaml
+        kubectl rollout status deployment/external-dns -n kube-system --timeout=300s
+        echo "✅ External DNS deployed to Gateway EKS cluster"
+
+    - name: Deploy Proxy to Gateway EKS
+      run: |
+        kubectl apply -f k8s/gateway/deployment.yaml
+        kubectl rollout status deployment/sentinel-proxy --timeout=300s
+        echo "✅ Proxy deployed to Gateway EKS cluster"
+
+    - name: Get LoadBalancer URL
+      run: |
+        echo "Waiting for LoadBalancer to be ready..."
+        kubectl wait --for=condition=ready pod -l app=sentinel-proxy --timeout=300s
+        kubectl get service sentinel-proxy-loadbalancer
+        echo "LoadBalancer service created. External IP will be available shortly."
+
+  terraform-apply-manual:
+    name: 'Terraform Apply (Manual)'
+    runs-on: ubuntu-latest
+    needs: terraform-verify
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'deploy'
+    environment: ${{ github.event.inputs.environment }}
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Verify AWS Credentials
+      run: |
+        echo "Verifying AWS credentials..."
+        aws sts get-caller-identity
+        echo "AWS region: ${{ env.AWS_REGION }}"
+        echo "Checking S3 bucket access..."
+        aws s3 ls s3://sentinel-terraform-state-721500739616 || echo "S3 bucket not accessible"
+
+    - name: Terraform Init
+      run: terraform init
+
+    - name: Terraform Plan
+      run: terraform plan -out=tfplan
+
+    - name: Terraform Apply
+      run: terraform apply -auto-approve tfplan
+
+    - name: Configure AWS Credentials for EKS
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Configure kubectl for Gateway EKS
+      run: |
+        aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name eks-vpc-gateway
+        kubectl get nodes
+
+    - name: Deploy External DNS to Gateway EKS
+      run: |
+        kubectl apply -f k8s/external-dns/external-dns.yaml
+        kubectl rollout status deployment/external-dns -n kube-system --timeout=300s
+        echo "✅ External DNS deployed to Gateway EKS cluster"
+
+    - name: Deploy Proxy to Gateway EKS
+      run: |
+        kubectl apply -f k8s/gateway/deployment.yaml
+        kubectl rollout status deployment/sentinel-proxy --timeout=300s
+        echo "✅ Proxy deployed to Gateway EKS cluster"
+
+    - name: Get LoadBalancer URL
+      run: |
+        echo "Waiting for LoadBalancer to be ready..."
+        kubectl wait --for=condition=ready pod -l app=sentinel-proxy --timeout=300s
+        kubectl get service sentinel-proxy-loadbalancer
+        echo "LoadBalancer service created. External IP will be available shortly."
+
+  deploy-backend-app:
+    name: 'Deploy Backend Application'
+    runs-on: ubuntu-latest
+    needs: [terraform-apply, terraform-apply-manual]
+    if: always() && (needs.terraform-apply.result == 'success' || needs.terraform-apply-manual.result == 'success')
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Configure AWS Credentials for EKS
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Configure kubectl for Backend EKS
+      run: |
+        aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name eks-vpc-backend
+        kubectl get nodes
+
+    - name: Deploy External DNS to Backend EKS
+      run: |
+        kubectl apply -f k8s/external-dns/external-dns.yaml
+        kubectl rollout status deployment/external-dns -n kube-system --timeout=300s
+        echo "✅ External DNS deployed to Backend EKS cluster"
+
+    - name: Deploy Backend Application
+      run: |
+        kubectl apply -f k8s/backend/deployment.yaml
+        kubectl rollout status deployment/hello-rapyd-backend --timeout=300s
+        echo "✅ Backend application deployed to Backend EKS cluster"
+
+    - name: Verify Backend Deployment
+      run: |
+        kubectl get pods -l app=hello-rapyd-backend
+        kubectl get services
+        echo "Backend service is ready and accessible within the cluster"
+
+  terraform-destroy:
+    name: 'Terraform Destroy (Manual)'
+    runs-on: ubuntu-latest
+    needs: terraform-verify
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
+    environment: production
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Verify AWS Credentials
+      run: |
+        echo "Verifying AWS credentials..."
+        aws sts get-caller-identity
+        echo "AWS region: ${{ env.AWS_REGION }}"
+        echo "Checking S3 bucket access..."
+        aws s3 ls s3://sentinel-terraform-state-721500739616 || echo "S3 bucket not accessible"
+
+    - name: Terraform Init
+      run: terraform init
+
+    - name: Terraform Plan Destroy
+      run: terraform plan -destroy -out=tfdestroy
+
+    - name: Terraform Destroy
+      run: terraform apply -auto-approve tfdestroy
